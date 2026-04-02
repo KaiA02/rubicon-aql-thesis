@@ -1,0 +1,1048 @@
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>{{ title or "Bachelorproject" }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+<header class="topbar">
+    <div class="brand">Query-Interface</div>
+
+    <div style="display:flex; align-items:center; gap:20px;">
+
+        {% if current_user and current_user.is_authenticated %}
+            <div style="font-size:14px;">
+                Logged in as <strong>{{ current_user.username }}</strong>
+                |
+                <a href="{{ url_for('logout') }}">Logout</a>
+            </div>
+        {% else %}
+            <a href="{{ url_for('login') }}">Login</a>
+        {% endif %}
+
+
+    </div>
+</header>
+
+
+<main class="page-wrap">
+    {% block content %}{% endblock %}
+</main>
+
+<script>
+/* ======================================================
+   HELP PANEL STATE MACHINE (WITH HISTORY)
+   ====================================================== */
+document.addEventListener("DOMContentLoaded", function(){
+
+    const panel   = document.getElementById("info-panel");
+    const openBtn = document.getElementById("info-open");
+    const backBtn = document.getElementById("info-back");
+    const body    = document.getElementById("info-body");
+    const title   = document.getElementById("info-title");
+
+    if (!panel || !openBtn || !body || !title) return;
+
+    let state = "home";
+    let history = [];
+
+    // Restore panel state after reload (e.g. submit)
+    const wasOpen = localStorage.getItem("infoPanelOpen");
+    const savedState = localStorage.getItem("infoPanelState");
+
+    if (wasOpen === "true" && savedState) {
+        panel.style.display = "block";
+        render(savedState, false, false);
+    }
+
+
+    /* -----------------------------
+       Open / Close
+    ------------------------------ */
+
+    openBtn.addEventListener("click", () => {
+    const isOpen = panel.style.display === "block";
+
+    if (isOpen) {
+        panel.style.display = "none";
+        localStorage.removeItem("infoPanelOpen");
+    } else {
+        panel.style.display = "block";
+        localStorage.setItem("infoPanelOpen", "true");
+        localStorage.setItem("infoPanelState", state);
+        render(state, false);
+    }});
+
+
+    backBtn.addEventListener("click", () => {
+        const prev = history.pop();
+        render(prev || "home", false);
+    });
+
+    panel.addEventListener("click", e => e.stopPropagation());
+
+    /* -----------------------------
+       Render Logic
+    ------------------------------ */
+
+    function render(nextState, pushHistory = true, persist = true){
+        if (pushHistory && state !== nextState) {
+            history.push(state);
+            if (history.length > 20) history.shift();
+        }
+
+        state = nextState;
+        if (!state) state = "home";
+        backBtn.classList.toggle("hidden", state === "home");
+
+        if(state === "home"){
+            title.textContent = "Query Language Help";
+            body.innerHTML = `
+                <p>
+                    This interface lets you retrieve information from multiple sources
+                    using a simple query language.
+                </p>
+
+                <p>
+                    Queries always follow the same basic structure:
+                </p>
+
+                <p>
+                    <code>find</code> → <code>from</code> → <code>where</code> → <code>return</code>
+                </p>
+
+                <p><strong>Example:</strong></p>
+
+                <code>
+                find building_key from db.FAC_ROOMS <br>
+                </code>
+
+                <hr>
+
+                <p><strong>AI usage rule:</strong></p>
+
+                <ul class="static-list">
+                    <li>
+                        Single quotes <code>'...'</code> request AI interpretation
+                    </li>
+                    <li>
+                        Double quotes <code>"..."</code> mean exact values
+                    </li>
+                    <li>
+                        No quotes → fully deterministic execution
+                    </li>
+                </ul>
+
+                <p><strong>Example:</strong></p>
+
+                <code>
+                find 'the building key' from db.fac_rooms
+                </code>
+
+                <p class="italic">
+                    The quoted text is interpreted by the AI and translated into a query.
+                </p>
+
+                <hr>
+                <p><strong>Exploring the data:</strong></p>
+
+                <p>
+                If you are unsure which tables, attributes, or filters exist,
+                you can explore the system using the <code>?</code> operator.
+                </p>
+
+                <code>
+                db ?<br>
+                wiki ?<br>
+                email ?<br>
+                pile ?
+                </code>
+
+                <p class="italic">
+                See the <code>?</code> section for detailed metadata and schema inspection.
+                </p>
+
+                <p>
+                    Every query also shows a <code>TRACE</code> section that explains
+                    how the system executed your request.
+                </p>
+
+                <hr>
+
+                <p><strong>Choose a data source:</strong></p>
+
+                <ul>
+                    <li data-target="database">Database – relational tables</li>
+                    <li data-target="wikipedia">Wikipedia – articles and metadata</li>
+                    <li data-target="email">Email – mailbox messages</li>
+                    <li data-target="pile">Pile – AI knowledge</li>
+                    <li data-target="?">Metadata – inspect schemas and attributes</li>
+                </ul>
+            `;
+            bindLinks();
+            return;
+        }
+
+        const views = {
+
+            /* =================================================
+               DATABASE
+               ================================================= */
+
+            database: `
+                <p>
+                The <strong>Database</strong> source allows you to query relational tables
+                using a SQL-like syntax.
+                </p>
+
+                <p>
+                The database is already loaded and contains several tables.
+                You only need to query the existing data.
+                </p>
+
+                <p>
+                Queries follow the structure:
+                </p>
+
+                <p>
+                <code>find</code> → <code>from</code> → <code>where</code> → <code>return</code>
+                </p>
+
+                <hr>
+
+                <p><strong>Selecting columns:</strong></p>
+
+                <ul class="static-list">
+                <li>
+                The <code>find</code> clause specifies which columns should be returned
+                </li>
+                <li>
+                Multiple columns must be separated by commas
+                </li>
+                <li>
+                <code>*</code> returns all columns
+                </li>
+                <li>
+                <code>DISTINCT</code> removes duplicate rows
+                </li>
+                </ul>
+
+                <hr>
+
+                <p><strong>Filtering results:</strong></p>
+
+                <ul class="static-list">
+                <li>
+                Conditions are written in the <code>where</code> clause
+                </li>
+                <li>
+                Logical operators <code>AND</code>, <code>OR</code>, and <code>NOT</code> are supported
+                </li>
+                <li>
+                Parentheses <code>( )</code> can be used to group conditions
+                </li>
+                </ul>
+
+                <hr>
+
+                <p><strong>String rules:</strong></p>
+
+                <ul class="static-list">
+                <li>
+                Double quotes <code>"..."</code> represent exact database values
+                </li>
+                <li>
+                Single quotes <code>'...'</code> request AI interpretation
+                </li>
+                <li>
+                Only quoted text containing spaces triggers AI usage
+                </li>
+                </ul>
+
+                <hr>
+
+                <p><strong>Exploring the database:</strong></p>
+
+                <p>
+                If you are unsure which tables or columns exist, you can inspect the schema using:
+                </p>
+
+                <code>
+                db ?<br>
+                db.&lt;table&gt; ?
+                </code>
+
+                <p class="italic">
+                See the <code>?</code> section for full metadata inspection.
+                </p>
+
+                <hr>
+
+                <p><strong>Referencing tables:</strong></p>
+
+                <p>
+                Tables can be referenced directly:
+                </p>
+
+                <code>
+                from ZIP_USA
+                </code>
+
+                <p>
+                Alternatively, the explicit form <code>db.&lt;table&gt;</code> can be used:
+                </p>
+
+                <code>
+                from db.ZIP_USA
+                </code>
+
+                <p class="italic">
+                Both forms are equivalent.
+                </p>
+
+                <hr>
+
+                <p><strong>Examples:</strong></p>
+
+                <p><em>Return all rows from a table:</em></p>
+
+                <code>
+                find * from ZIP_USA
+                return table
+                </code>
+
+                <p><em>Deterministic query:</em></p>
+
+                <code>
+                find city_name, zip_code from ZIP_USA
+                where ZIP_CODE = "623"
+                return table
+                </code>
+
+                <p><em>Using AI to select columns:</em></p>
+
+                <code>
+                find 'city name and identifier' from ZIP_USA
+                return table
+                </code>
+
+                <p><em>Using AI in filtering:</em></p>
+
+                <code>
+                find 'city name and identifier' from ZIP_USA
+                where 'city is boston'
+                return table
+                </code>
+
+                <p><em>Combining AI and deterministic filters:</em></p>
+
+                <code>
+                find 'city name and zip code' from ZIP_USA
+                where ZIP_CODE = 623 and not 'city is Est Reales'
+                return table
+                </code>
+
+                <p><em>Logical operators:</em></p>
+
+                <code>
+                find city_name, zip_code from ZIP_USA
+                where (ZIP_CODE = 623 or ZIP_CODE = 624)
+                and not (CITY_NAME = 'Est Reales')
+                return table
+                </code>
+
+                <p><em>Removing duplicates:</em></p>
+
+                <code>
+                find distinct city_name, zip_code from ZIP_USA
+                where CITY_NAME = "Boston"
+                return table
+                </code>
+
+                <p><em>Automatic repair of unknown columns:</em></p>
+
+                <code>
+                find city_n from ZIP_USA
+                return table
+                </code>
+
+                <p><em>AI-assisted table and column resolution:</em></p>
+
+                <code>
+                find 'city name and identifier', zip_co
+                from 'usa zip database'
+                where 'zip code is not 623 and not 624'
+                return table
+                </code>
+                `,
+
+
+            /* =================================================
+               WIKIPEDIA
+               ================================================= */
+
+            wikipedia: `
+                <p>
+                    <strong>Wikipedia</strong> supports direct page lookup
+                    and structured attribute-based search.
+                </p>
+
+                <ul>
+                    <li data-target="wiki-direct">Direct page lookup</li>
+                    <li data-target="wiki-attribute">Attribute-based search</li>
+                </ul>
+            `,
+
+            "wiki-direct": `
+                <p>
+                <strong>Direct page lookup</strong> retrieves a single Wikipedia article
+                based on its title.
+                </p>
+
+                <p>
+                This mode returns the content of one page and allows simple filtering
+                based on the article summary.
+                </p>
+
+                <p>
+                Queries follow the standard structure:
+                </p>
+
+                <p>
+                <code>find</code> → <code>from</code> → <code>where</code> → <code>return</code>
+                </p>
+
+                <hr>
+
+                <p><strong>Finding an article:</strong></p>
+
+                <p>
+                If the <code>find</code> clause contains a page title,
+                the system retrieves the corresponding Wikipedia article.
+                </p>
+
+                <code>
+                find Germany from wikipedia
+                </code>
+
+                <hr>
+
+                <p><strong>AI title interpretation:</strong></p>
+
+                <p>
+                Single quotes trigger AI interpretation of the title.
+                </p>
+
+                <code>
+                find 'population growth in germany' from wikipedia
+                </code>
+
+                <p>
+                The system translates the description into the most relevant article.
+                </p>
+
+                <hr>
+
+                <p><strong>Filtering by summary:</strong></p>
+
+                <p>
+                The <code>where</code> clause can filter the article using keywords
+                from the page summary.
+                </p>
+
+                <code>
+                find Germany from wikipedia
+                where economy
+                </code>
+
+                <p>
+                Using quotes enables semantic filtering:
+                </p>
+
+                <code>
+                find Germany from wikipedia
+                where 'gdp growth'
+                </code>
+
+                <hr>
+
+                <p><strong>Structured content:</strong></p>
+
+                <ul class="static-list">
+                <li><code>from wikipedia tables</code> — extract tables from the article</li>
+                <li><code>from wikipedia pictures</code> — extract images from the article</li>
+                </ul>
+
+                <hr>
+
+                <p><strong>Return types:</strong></p>
+
+                <ul class="static-list">
+                <li><code>return text</code> — article summary</li>
+                <li><code>return table</code> — extracted tables</li>
+                <li><code>return picture</code> — extracted images</li>
+                </ul>
+
+                <hr>
+
+                <p><strong>Examples:</strong></p>
+
+                <p><em>Retrieve an article:</em></p>
+
+                <code>
+                find Germany from wikipedia
+                </code>
+
+                <p><em>Filter by keyword:</em></p>
+
+                <code>
+                find Germany from wikipedia
+                where economy
+                </code>
+
+                <p><em>Semantic search:</em></p>
+
+                <code>
+                find 'population growth in germany' from wikipedia
+                </code>
+
+                <p><em>Extract tables:</em></p>
+
+                <code>
+                find Germany from wikipedia tables
+                return table
+                </code>
+
+                <p><em>Extract pictures:</em></p>
+
+                <code>
+                find germany flag from wikipedia pictures
+                return picture
+                </code>
+                `,
+
+            "wiki-attribute": `
+                <p>
+                <strong>Attribute-based search</strong> allows structured queries
+                across multiple Wikipedia pages using explicit page attributes.
+                </p>
+
+                <p>
+                Unlike direct page lookup, this mode returns a set of pages
+                filtered by their metadata.
+                </p>
+
+                <p>
+                Execution is fully deterministic. AI is not used in this mode.
+                </p>
+
+                <hr>
+
+                <p><strong>Using Wikipedia attributes:</strong></p>
+
+                <p>
+                Wikipedia metadata can be accessed using the prefix <code>wiki.</code>.
+                </p>
+
+                <p>
+                Common attributes include:
+                </p>
+
+                <code>
+                wiki.title<br>
+                wiki.abstract<br>
+                wiki.pageid<br>
+                wiki.url<br>
+                </code>
+
+                <p class="italic">
+                Use <code>wiki ?</code> to explore all available attributes.
+                </p>
+
+                <hr>
+
+                <p><strong>FIND clause rules:</strong></p>
+
+                <ul class="static-list">
+                <li>
+                The <code>find</code> clause must contain either text or attributes.
+                </li>
+
+                <li>
+                Multiple attributes in the <code>find</code> clause must be separated by commas.
+                </li>
+
+                <li>
+                Text is used for search queries (e.g. <code>MIT Professor</code>).
+                </li>
+
+                <li>
+                Attributes return specific metadata fields (e.g. <code>wiki.title</code>).
+                </li>
+
+                <li>
+                Text and attributes cannot be mixed in the same <code>find</code> clause.
+                </li>
+                </ul>
+
+                <hr>
+
+                <p><strong>Filtering pages:</strong></p>
+
+                <ul class="static-list">
+                <li><code>=</code> performs exact matching</li>
+                <li><code>in</code> perform substring match</li>
+                <li>Logical operators <code>AND</code>, <code>OR</code>, and <code>NOT</code> are supported</li>
+                <li>Parentheses <code>( )</code> can group conditions</li>
+                </ul>
+
+                <hr>
+
+                <p><strong>Search behavior:</strong></p>
+
+                <ul class="static-list">
+                <li>
+                If <code>find</code> contains text, that text becomes the search query.
+                </li>
+
+                <li>
+                If <code>find</code> contains only Wikipedia attributes,
+                the search query is extracted from the first quoted value
+                in the <code>where</code> clause.
+                </li>
+
+                <li>
+                The <code>where</code> clause only filters the retrieved pages.
+                </li>
+
+                <li>
+                Filtering never expands the search results.
+                </li>
+                </ul>
+
+                <p class="italic">
+                In other words: search first, then filter.
+                </p>
+
+                <hr>
+
+                <p><strong>Examples:</strong></p>
+
+                <p><em>Search for pages related to MIT professors:</em></p>
+
+                <code>
+                find MIT Professor from wikipedia
+                where 'MIT' in wiki.abstract
+                </code>
+
+                <p><em>Exact title match:</em></p>
+
+                <code>
+                find Germany from wikipedia
+                where wiki.title = "Germany"
+                </code>
+
+                <p><em>Returning specific attributes:</em></p>
+
+                <code>
+                find wiki.pageid from wikipedia
+                where wiki.title = "Germany"
+                </code>
+
+                <p><em>Returning multiple attributes:</em></p>
+
+                <code>
+                find wiki.title, wiki.url
+                from wikipedia
+                where wiki.title = "France"
+                </code>
+
+                <p><em>Filtering by categories:</em></p>
+
+                <code>
+                find wiki.title, wiki.categories
+                from wikipedia
+                where 'countries in europe' in wiki.categories
+                </code>
+
+                <p><em>Combining conditions:</em></p>
+
+                <code>
+                find wiki.title, wiki.url
+                from wikipedia
+                where 'MIT' in wiki.abstract
+                and 'computer' in wiki.abstract
+                </code>
+
+                <p><em>Logical operators:</em></p>
+
+                <code>
+                find MIT Professor from wikipedia
+                where 'MIT' in wiki.abstract
+                and ("nuno" in wiki.title or "lex" in wiki.title)
+                </code>
+
+                <p><em>Using NOT:</em></p>
+
+                <code>
+                find MIT from wikipedia
+                where 'MIT' in wiki.abstract
+                and not ('license' in wiki.title or 'press' in wiki.title)
+                </code>
+                `
+                ,
+
+
+            /* =================================================
+               EMAIL
+               ================================================= */
+
+            email: `
+                <p>
+                The <strong>Email</strong> source allows you to search your mailbox
+                using structured filters and keyword queries.
+                </p>
+
+                <p>
+                Queries operate on indexed email metadata such as sender, subject,
+                labels, attachments, and timestamps.
+                </p>
+
+                <p>
+                Queries follow the standard structure:
+                </p>
+
+                <p>
+                <code>find</code> → <code>from</code> → <code>where</code> → <code>return</code>
+                </p>
+
+                <hr>
+
+                <p><strong>Email attributes:</strong></p>
+
+                <p>
+                Email metadata can be accessed using the prefix <code>email.</code>.
+                </p>
+
+                <code>
+                email.from<br>
+                email.to<br>
+                email.cc<br>
+                email.subject<br>
+                </code>
+
+                <p class="italic">
+                Use <code>email ?</code> to inspect all available attributes.
+                </p>
+
+                <hr>
+
+                <p><strong>Filtering emails:</strong></p>
+
+                <ul class="static-list">
+                <li>Filters use the form <code>email.attribute = "value"</code></li>
+                <li>Logical operators <code>AND</code>, <code>OR</code>, and <code>NOT</code> are supported</li>
+                <li>Parentheses <code>( )</code> can group conditions</li>
+                </ul>
+
+                <hr>
+
+                <p><strong>AI queries (WHERE clause only):</strong></p>
+
+                <p>
+                Single quotes trigger AI interpretation in the <code>where</code> clause.
+                </p>
+
+                <code>
+                where 'emails from google last week'
+                </code>
+
+                <p>
+                The system translates the request into a structured email search query.
+                </p>
+
+                <hr>
+
+                <p><strong>FIND clause behavior:</strong></p>
+
+                <ul class="static-list">
+                <li>
+                Generic terms such as <code>*</code>, <code>mail</code>, or <code>emails</code>
+                return all matching emails.
+                </li>
+
+                <li>
+                If <code>find</code> contains email attributes, the query returns those attributes.
+                </li>
+                <li>
+                Multiple attributes must be separated by commas.
+                </li>
+
+                <li>
+                Otherwise, the <code>find</code> clause is interpreted as a keyword search
+                across email headers and snippets.
+                </li>
+
+                <li>
+                Text and attributes cannot be mixed in the same <code>find</code> clause.
+                </li>
+                </ul>
+
+                <hr>
+
+                <p><strong>Examples:</strong></p>
+
+                <p><em>Return all emails:</em></p>
+
+                <code>
+                find mail from email
+                </code>
+
+                <p><em>Keyword search:</em></p>
+
+                <code>
+                find rechnung from email
+                </code>
+
+                <p><em>Filtering by sender:</em></p>
+
+                <code>
+                find mail from email
+                where email.from = "google"
+                </code>
+
+                <p><em>Filtering by attachments:</em></p>
+
+                <code>
+                find mail from email
+                where email.hasAttachments = "true"
+                </code>
+
+                <p><em>Filtering by date:</em></p>
+
+                <code>
+                find mail from email
+                where email.after = "2026/01/01"
+                </code>
+
+                <p><em>AI interpretation:</em></p>
+
+                <code>
+                find mail from email
+                where 'emails from google last week'
+                </code>
+
+                <p><em>Logical operators:</em></p>
+
+                <code>
+                find mail from email
+                where (email.from = "google" or email.from = "kai")
+                and email.before = "2026/01/15"
+                </code>
+
+                <p><em>Returning specific attributes:</em></p>
+
+                <code>
+                find email.subject, email.from, email.hasAttachments
+                from email
+                </code>
+
+                <p><em>Summarizing emails:</em></p>
+
+                <code>
+                find sicherheitswarnung from email
+                return text
+                </code>
+
+                <p class="italic">
+                If multiple emails match, the system selects a representative message
+                before generating the summary.
+                </p>
+                `,
+
+
+            /* =================================================
+               PILE
+               ================================================= */
+
+            pile: `
+                <p>
+                The <strong>Pile</strong> source answers questions using an AI model.
+                </p>
+
+                <p>
+                Unlike the other data sources, Pile does not query a structured dataset.
+                Instead, the AI generates the answer directly.
+                </p>
+
+                <hr>
+
+                <p><strong>Execution model:</strong></p>
+
+                <ul class="static-list">
+                <li>The AI model is always used</li>
+                <li>No tables or fixed schema exist</li>
+                <li>The result is generated directly from the model</li>
+                </ul>
+
+                <hr>
+
+                <p><strong>Using the WHERE clause:</strong></p>
+
+                <p>
+                In Pile queries, the <code>where</code> clause provides additional context
+                for the AI rather than acting as a strict filter.
+                </p>
+
+                <p>
+                Logical operators such as <code>AND</code>, <code>OR</code>, and <code>NOT</code>
+                are interpreted semantically by the model.
+                </p>
+
+                <hr>
+
+                <p><strong>Output types:</strong></p>
+
+                <ul class="static-list">
+                <li>
+                <strong>Text (default):</strong> short natural language answer
+                </li>
+                <li>
+                <strong>Table:</strong> structured information generated by the AI
+                </li>
+                </ul>
+
+                <hr>
+
+                <p><strong>Examples:</strong></p>
+
+                <p><em>Basic question:</em></p>
+
+                <code>
+                find climate change from pile
+                </code>
+
+                <p><em>Adding context:</em></p>
+
+                <code>
+                find inflation from pile where causes in Europe
+                </code>
+
+                <p><em>Structured output:</em></p>
+
+                <code>
+                find renewable energy sources from pile return table
+                </code>
+
+                <p><em>Complex contextual query:</em></p>
+
+                <code>
+                find cybersecurity risks from pile
+                where programming languages are involved
+                return table
+                </code>
+                `,
+
+            /* =================================================
+               METADATA
+               ================================================= */
+
+            "?": `
+                <p>
+                The <strong>?</strong> operator allows you to inspect metadata and explore
+                the available structure of the system.
+                </p>
+
+                <p>
+                Metadata queries do not retrieve data. They only show information
+                about available tables, attributes, and capabilities.
+                </p>
+
+                <p>
+                This helps you understand what data exists before writing a query.
+                </p>
+
+                <hr>
+
+                <p><strong>General syntax:</strong></p>
+
+                <code>
+                ?<br>
+                &lt;datasource&gt; ?<br>
+                &lt;datasource&gt;.&lt;object&gt; ?
+                </code>
+
+                <p class="italic">
+                Metadata inspection is always deterministic. AI is not used.
+                </p>
+
+                <hr>
+
+                <p><strong>Database inspection:</strong></p>
+
+                <ul class="static-list">
+                <li><code>db ?</code> — list all available tables</li>
+                <li><code>db.&lt;table&gt; ?</code> — show columns of a table</li>
+                <li><code>db.&lt;column&gt; in &lt;table&gt; ?</code> — inspect a specific column</li>
+                </ul>
+
+                <hr>
+
+                <p><strong>Wikipedia attributes:</strong></p>
+
+                <ul class="static-list">
+                <li><code>wiki ?</code> — list available page attributes</li>
+                <li><code>wiki.&lt;attribute&gt; ?</code> — inspect a specific attribute</li>
+                </ul>
+
+                <hr>
+
+                <p><strong>Email attributes:</strong></p>
+
+                <ul class="static-list">
+                <li><code>email ?</code> — list message attributes</li>
+                <li><code>email.&lt;attribute&gt; ?</code> — inspect filters and operators</li>
+                </ul>
+
+                <hr>
+
+                <p><strong>Pile capabilities:</strong></p>
+
+                <ul class="static-list">
+                <li><code>pile ?</code> — list AI capabilities</li>
+                <li><code>pile.&lt;capability&gt; ?</code> — inspect a capability</li>
+                </ul>
+
+                `
+
+        };
+
+        title.textContent =
+            state === "?" ? "Metadata & Inspection"
+            : state.charAt(0).toUpperCase() + state.slice(1);
+
+        body.innerHTML = views[state];
+        if (persist) {
+            localStorage.setItem("infoPanelState", state);
+        }
+        bindLinks();
+    }
+
+    /* -----------------------------
+       Link Binding
+    ------------------------------ */
+
+    function bindLinks(){
+        body.querySelectorAll("[data-target]").forEach(el => {
+            el.addEventListener("click", () => {
+                render(el.dataset.target, true);
+            });
+        });
+    }
+});
+</script>
+</body>
+</html>

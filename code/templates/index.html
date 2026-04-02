@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page">
+    <div class="page-help">
+        <div class="info-wrapper">
+            <div class="info-icon" id="info-open" tabindex="0">Info Point</div>
+
+            <div class="info-panel" id="info-panel">
+                <div class="info-header">
+                    <span id="info-back" class="info-back hidden">←</span>
+                    <strong id="info-title">Query Language Help</strong>
+                </div>
+                <div class="info-body" id="info-body"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Input area with ‘highlight overlay’ -->
+    <form method="POST" action="" autocomplete="off">
+        <!-- Visible coloured marking (located behind the text field) -->
+        <!-- Actual input field -->
+        <div class="input-wrap">
+            <div class="highlight-layer" id="highlight"></div>
+            <textarea name="user_input"
+                  id="user_input"
+                  autocomplete="off"
+                  placeholder="find ... from ... (where) ... (return) / ? ..."
+                  autofocus>{{ user_input }}</textarea>
+        </div>
+        <input type="submit" value="Submit" />
+        {% if response %}
+            <p><strong>Your input:</strong></p>
+            <pre>{{ user_input }}</pre>
+
+            <p><strong>Answer{% if engine %} (Source: {{ engine }}){% endif %}:</strong></p>
+            <pre>{{ response }}</pre>
+        {% endif %}
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const textarea = document.getElementById('user_input');
+    const highlightLayer = document.getElementById('highlight');
+
+    // Strict keyword order, but allow skipping optional ones (where/return)
+    const keywordOrder = ["find", "from", "where", "return"];
+
+    function escapeHtml(s) {
+        return s
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    // True if char is a "word" char (like in \w): [A-Za-z0-9_]
+    function isWordChar(ch) {
+        return ch != null && /[A-Za-z0-9_]/.test(ch);
+    }
+
+    // "email .  from" should count as attribute access -> do NOT highlight "from"
+    function hasDotBeforeWithSpaces(text, startIndex) {
+        let i = startIndex - 1;
+        while (i >= 0 && text[i] === " ") i--;
+        return i >= 0 && text[i] === ".";
+    }
+
+    // Highlight engine: single left-to-right pass, with quote-awareness
+    function highlightStructured(text) {
+        let out = "";
+        let i = 0;
+        let inSingleQuote = false;
+        let inDoubleQuote = false;
+
+        // Track which keywords already appeared (to avoid highlighting duplicates)
+        const seen = {
+            find: false,
+            from: false,
+            where: false,
+            return: false
+        };
+
+        // Current "allowed level" in the keyword order
+        // 0 = before find, 1 = after find, 2 = after from, 3 = after where, 4 = after return
+        let level = 0;
+
+        // Helper: attempt to match and highlight a keyword at position i
+        function tryKeywordAt(pos) {
+            for (const kw of keywordOrder) {
+                const slice = text.slice(pos, pos + kw.length);
+
+                if (slice.toLowerCase() !== kw) continue;
+
+                // Must be whole word
+                const before = pos === 0 ? null : text[pos - 1];
+                const after = (pos + kw.length >= text.length) ? null : text[pos + kw.length];
+                if (isWordChar(before) || isWordChar(after)) continue;
+
+                // Must not be attribute access like "email . from"
+                if (hasDotBeforeWithSpaces(text, pos)) continue;
+
+                // Must not be followed by ":" (e.g., "from:google" inside where)
+                if (after === ":") continue;
+
+                // Must be in correct order AND not already used
+                const kwIdx = keywordOrder.indexOf(kw);
+                if (seen[kw]) continue;
+
+                // You can only use keywords at or after the current level,
+                // but must respect order: kwIdx must be >= levelIndexAllowed
+                // Mapping: level 0 allows "find" (idx 0)
+                //         level 1 allows "from" (idx 1) or later (optional skipping not allowed backwards)
+                // In practice: require kwIdx >= level and also require that all earlier mandatory
+                // keywords have been seen (e.g. can't do "from" before "find").
+                if (kwIdx < level) continue;
+
+                // Enforce prerequisites: you cannot jump over a REQUIRED keyword.
+                // Here: "find" is required before any other keyword.
+                // "from" is required before where/return.
+                if (kw !== "find" && !seen.find) continue;
+                if ((kw === "where" || kw === "return") && !seen.from) continue;
+
+                // Mark it
+                seen[kw] = true;
+                level = kwIdx + 1; // advance level to next position after this keyword
+
+                return { kw, len: kw.length };
+            }
+            return null;
+        }
+
+        while (i < text.length) {
+            const ch = text[i];
+
+            // Toggle single quotes '
+            if (ch === "'" && !inDoubleQuote) {
+                inSingleQuote = !inSingleQuote;
+                out += escapeHtml(ch);
+                i++;
+                continue;
+            }
+
+            // Toggle double quotes "
+            if (ch === '"' && !inSingleQuote) {
+                inDoubleQuote = !inDoubleQuote;
+                out += escapeHtml(ch);
+                i++;
+                continue;
+            }
+
+
+            // Always highlight '?' outside quotes
+            if (!inSingleQuote && !inDoubleQuote && ch === "?") {
+                out += `<span class="keyword">?</span>`;
+                i++;
+                continue;
+            }
+
+            // Highlight structured keywords outside quotes
+            if (!inSingleQuote && !inDoubleQuote) {
+                const hit = tryKeywordAt(i);
+                if (hit) {
+                    const raw = text.slice(i, i + hit.len);
+                    out += `<span class="keyword">${escapeHtml(raw)}</span>`;
+                    i += hit.len;
+                    continue;
+                }
+            }
+
+            // default: copy char
+            out += escapeHtml(ch);
+            i++;
+        }
+
+        return out;
+    }
+
+    function highlightText() {
+        const text = textarea.value;
+        highlightLayer.innerHTML =
+            highlightStructured(text) + (text.endsWith("\n") ? "\n" : "");
+        highlightLayer.style.height = textarea.clientHeight + "px";
+    }
+
+    textarea.addEventListener("input", highlightText);
+    textarea.addEventListener("scroll", () => {
+        highlightLayer.scrollTop = textarea.scrollTop;
+        highlightLayer.scrollLeft = textarea.scrollLeft;
+    });
+
+    highlightText();
+});
+</script>
+
+<!-- =====================================================
+     Telemetry / Typing Analytics (non-blocking)
+     ===================================================== -->
+<script>
+(() => {
+    const textarea = document.getElementById("user_input");
+    const form = textarea.closest("form");
+
+    const SESSION_ID = crypto.randomUUID();
+    const SESSION_STARTED_AT = new Date().toISOString();
+
+    let typingStartTime = null;
+    let lastInputTime = null;
+    let activeTypingDuration = 0;
+
+    let pauseCount = 0;
+    let pauses = [];
+    let pauseStartTime = null;
+    let typingTimeout = null;
+
+    textarea.addEventListener("input", () => {
+        const now = Date.now();
+
+        if (!typingStartTime) {
+            typingStartTime = now;
+            lastInputTime = now;
+            return;
+        }
+
+        activeTypingDuration += now - lastInputTime;
+        lastInputTime = now;
+
+        clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(() => {
+            pauseStartTime = Date.now();
+            pauseCount++;
+        }, 500);
+    });
+
+    textarea.addEventListener("input", () => {
+        if (pauseStartTime) {
+            pauses.push({
+                duration_ms: Date.now() - pauseStartTime
+            });
+            pauseStartTime = null;
+        }
+    });
+
+    form.addEventListener("submit", async (e) => {
+        if (!typingStartTime) return;
+
+        e.preventDefault();
+
+        const submitTime = Date.now();
+
+        const payload = {
+            session: {
+                id: SESSION_ID,
+                started_at: SESSION_STARTED_AT
+            },
+
+            query_final: textarea.value,
+
+            typing: {
+                started_at: new Date(typingStartTime).toISOString(),
+                ended_at: new Date(submitTime).toISOString(),
+                active_duration_ms: activeTypingDuration,
+                total_duration_ms: submitTime - typingStartTime,
+                pause_count: pauseCount,
+                pauses: pauses
+            },
+
+            submit: {
+                submitted_at: new Date(submitTime).toISOString()
+            },
+
+            meta: {
+                input_length: textarea.value.length,
+                user_agent: navigator.userAgent
+            }
+        };
+
+        try {
+            await fetch("/search-log", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload),
+                keepalive: true
+            });
+        } catch (err) {
+            console.error("search-log failed", err);
+        }
+
+        form.submit();
+    });
+})();
+</script>
+
+
+
+{% endblock %}

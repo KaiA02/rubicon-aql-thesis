@@ -1,0 +1,12 @@
+../.venv
+__pycache__
+*.pyc
+.env
+instance
+.idea/
+beaver/
+!beaver/convert_mysql_dump_to_sqlite.py
+config.ini
+client_secret.json
+token.json
+logs/

@@ -1,0 +1,10 @@
+*.sqlite3
+__pycache__/
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+.DS_Store
