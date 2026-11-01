@@ -13,7 +13,7 @@ bcrypt = Bcrypt()
 
 
 def init_auth(app):
-    app.secret_key = "CHANGE_THIS_SECRET_KEY"
+    app.secret_key = FLASK_SECRET_KEY or secrets.token_hex(32)
 
     login_manager.init_app(app)
     login_manager.login_view = "login"
