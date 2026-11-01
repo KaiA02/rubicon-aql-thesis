@@ -16,3 +16,9 @@ WIKI_CONTACT_EMAIL = config.get(
     "CONTACT_EMAIL",
     fallback=""
 )
+
+FLASK_SECRET_KEY = config.get(
+    "FLASK",
+    "SECRET_KEY",
+    fallback=None
+)
