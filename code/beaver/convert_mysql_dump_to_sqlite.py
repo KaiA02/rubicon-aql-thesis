@@ -6,7 +6,7 @@ from pathlib import Path
 # Paths for input dump and output SQLite database
 BASE = Path(__file__).resolve().parent
 MYSQL_DUMP = BASE / "new_dw_indexed.sql"
-SQLITE_DB = BASE / "beaver.sqlite3"
+SQLITE_DB = BASE / "dw.sqlite"
 
 
 def clean_line(line: str) -> str:
