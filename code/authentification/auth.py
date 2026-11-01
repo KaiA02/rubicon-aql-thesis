@@ -2,6 +2,8 @@ import sqlite3
 from flask_login import LoginManager, UserMixin
 from flask_bcrypt import Bcrypt
 import os
+import secrets
+from Configurations.config_loader import FLASK_SECRET_KEY
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 AUTH_DB_PATH = os.path.join(BASE_DIR, "auth.sqlite")
